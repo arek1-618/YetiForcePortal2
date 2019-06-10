@@ -27,19 +27,22 @@ class Buy extends \App\Controller\Action
 	{
 		$response = new \App\Response();
 		try {
+			$totalPriceGross = 0.0;
 			if ($this->request->isEmpty('reference_id')) {
 				$cart = new Cart();
 				$responseFromApi = $this->createSingleOrderFromCart($cart);
+				$totalPriceGross = $cart->calculateTotalPriceGross();
 				if (!isset($responseFromApi['errors'])) {
-					$_SESSION['user']['companyDetails']['sum_open_orders'] = $_SESSION['user']['companyDetails']['sum_open_orders'] + $cart->calculateTotalPriceGross();
+					$_SESSION['user']['companyDetails']['sum_open_orders'] = $_SESSION['user']['companyDetails']['sum_open_orders'] + $totalPriceGross;
 					$cart->removeAll();
 					$cart->save();
 				}
 			} else {
 				$cart = new ReferenceCart($this->request->getInteger('reference_id'), $this->request->getByType('reference_module', Purifier::ALNUM));
 				$responseFromApi = $this->createSingleOrderFromCart($cart);
+				$totalPriceGross = $cart->calculateTotalPriceGross();
 				if (!isset($responseFromApi['errors'])) {
-					$_SESSION['user']['companyDetails']['sum_open_orders'] = $_SESSION['user']['companyDetails']['sum_open_orders'] + $cart->calculateTotalPriceGross();
+					$_SESSION['user']['companyDetails']['sum_open_orders'] = $_SESSION['user']['companyDetails']['sum_open_orders'] + $totalPriceGross;
 				}
 			}
 			$paymentType = \App\Config::get('paymentType');
@@ -50,7 +53,7 @@ class Buy extends \App\Controller\Action
 				if ($payment instanceof \App\Payments\PaymentsMultiCurrencyInterface) {
 					$payment->setCurrency('PLN');
 				}
-				$payment->setAmount($cart->calculateTotalPriceGross());
+				$payment->setAmount($totalPriceGross);
 				if ('GET' === $payment->getTypeOfOutputCommunication()) {
 					$responseFromApi['paymentUrl'] = $payment->generatePaymentURL();
 				} else {

@@ -19,21 +19,45 @@ session_save_path(YF_ROOT . DIRECTORY_SEPARATOR . 'cache' . DIRECTORY_SEPARATOR 
 session_start();
 
 try {
+	$paymentStatusMap = [
+		1 => 'Created',
+		2 => 'Created',
+		3 => 'Paid',
+		4 => 'Denied',
+	];
+	$paymentSystemMap = [
+		'Redsys' => 'PLL_REDSYS',
+		'Dotpay' => 'PLL_DOTPAY',
+	];
 	$request = new \App\Request($_REQUEST);
 	$paymentSystem = $request->getByType('paymentSystem', \App\Purifier::ALNUM);
 	$payments = \App\Payments::getInstance($paymentSystem);
 	$transactionState = $payments->requestHandlingFromPaymentsSystem($request->getAllRaw());
-	$answerfromApi = \App\Api::getInstance()->call('ReceiveFromPaymentsSystem', [
+	if (empty($paymentStatusMap[$transactionState->status])) {
+		throw new \Exception('Unknown status of the transaction.');
+	}
+	if (empty($paymentSystemMap[$paymentSystem])) {
+		throw new \Exception('Unknown payment system');
+	}
+	$api = new \App\Api([
+		'Content-Type' => 'application/json',
+		'X-ENCRYPTED' => 1,
+		'X-API-KEY' => \App\Config::get('paymentApiKey')
+	], [
+		'auth' => [\App\Config::get('paymentServerName'), \App\Config::get('paymentServerPass')]
+	]);
+	$answerfromApi = $api->call('ReceiveFromPaymentsSystem', [
 		'ssingleordersid' => $transactionState->crmOrderId,
-		'paymentsin_status' => $transactionState->status,
+		'paymentsin_status' => $paymentStatusMap[$transactionState->status],
 		'transaction_id' => $transactionState->transactionId,
 		'paymentsvalue' => $transactionState->amount,
 		'payments_original_value' => $transactionState->originalAmount,
 		'currency_id' => $transactionState->currency,
 		'payments_original_currency' => $transactionState->originalCurrency,
 		'paymentstitle' => $transactionState->description,
-		'payment_system' => $paymentSystem,
+		'payment_system' => $paymentSystemMap[$paymentSystem],
 	], 'PUT');
+
 	echo $payments->successAnswerForPaymentSystem();
 } catch (\Throwable $exception) {
 	header('HTTP/1.1 400 Bad request');
